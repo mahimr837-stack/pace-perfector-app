@@ -62,7 +62,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = "en-US";
+    recognition.lang = "bn-BD";
 
     recognition.onresult = (event: any) => {
       let final = "";
