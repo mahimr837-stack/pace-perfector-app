@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { calculateWPM } from "@/utils/speechAnalysis";
 
 export interface WPMSnapshot {
-  time: number; // seconds since start
+  time: number;
   wpm: number;
 }
 
@@ -34,6 +34,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const startTimeRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval>>();
   const transcriptRef = useRef("");
+  const shouldRestartRef = useRef(false);
+  const restartTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const SpeechRecognition = typeof window !== "undefined"
     ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -56,8 +58,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     setWpmHistory(prev => [...prev, { time: Math.round(elapsed), wpm }]);
   }, []);
 
-  const startListening = useCallback(() => {
-    if (!SpeechRecognition) return;
+  const createRecognition = useCallback(() => {
+    if (!SpeechRecognition) return null;
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
@@ -82,23 +84,65 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error:", event.error);
-      if (event.error !== "no-speech") {
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        shouldRestartRef.current = false;
         setIsListening(false);
       }
+      // For "no-speech" or "network" errors, let onend handle restart
     };
 
     recognition.onend = () => {
-      // Restart if still supposed to be listening
-      if (recognitionRef.current) {
-        try {
-          recognition.start();
-        } catch (e) {
-          // ignore
-        }
+      if (shouldRestartRef.current) {
+        // Delay restart to avoid rapid start/stop cycles that crash the tab
+        restartTimeoutRef.current = setTimeout(() => {
+          if (!shouldRestartRef.current) return;
+          try {
+            const newRec = createRecognition();
+            if (newRec) {
+              recognitionRef.current = newRec;
+              newRec.start();
+            }
+          } catch (e: any) {
+            console.error("Failed to restart recognition:", e);
+            if (e.name === "NotAllowedError") {
+              shouldRestartRef.current = false;
+              setIsListening(false);
+            }
+          }
+        }, 300);
       }
     };
 
-    recognitionRef.current = recognition;
+    return recognition;
+  }, [SpeechRecognition]);
+
+  const startListening = useCallback(async () => {
+    if (!SpeechRecognition) return;
+
+    // Check microphone permission first
+    try {
+      if (navigator.permissions) {
+        const status = await navigator.permissions.query({ name: "microphone" as PermissionName });
+        if (status.state === "denied") {
+          console.error("Microphone permission denied");
+          return;
+        }
+      }
+    } catch {
+      // permissions API may not be available
+    }
+
+    // Clean up any existing recognition
+    shouldRestartRef.current = false;
+    if (restartTimeoutRef.current) {
+      clearTimeout(restartTimeoutRef.current);
+    }
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch {}
+      recognitionRef.current = null;
+    }
+
+    // Reset state
     transcriptRef.current = "";
     setTranscript("");
     setInterimTranscript("");
@@ -109,30 +153,48 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     setPeakWPM(0);
     startTimeRef.current = Date.now();
 
-    recognition.start();
-    setIsListening(true);
+    // Small delay to ensure previous recognition is fully cleaned up
+    await new Promise(resolve => setTimeout(resolve, 200));
 
-    timerRef.current = setInterval(updateMetrics, 1000);
-  }, [SpeechRecognition, updateMetrics]);
+    const recognition = createRecognition();
+    if (!recognition) return;
+
+    recognitionRef.current = recognition;
+    shouldRestartRef.current = true;
+
+    try {
+      recognition.start();
+      setIsListening(true);
+      timerRef.current = setInterval(updateMetrics, 1000);
+    } catch (e) {
+      console.error("Failed to start recognition:", e);
+      recognitionRef.current = null;
+      shouldRestartRef.current = false;
+    }
+  }, [SpeechRecognition, createRecognition, updateMetrics]);
 
   const stopListening = useCallback(() => {
+    shouldRestartRef.current = false;
+    if (restartTimeoutRef.current) {
+      clearTimeout(restartTimeoutRef.current);
+    }
     if (recognitionRef.current) {
-      const rec = recognitionRef.current;
+      try { recognitionRef.current.abort(); } catch {}
       recognitionRef.current = null;
-      rec.stop();
     }
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
     setIsListening(false);
-    // Final metrics update
     updateMetrics();
   }, [updateMetrics]);
 
   useEffect(() => {
     return () => {
+      shouldRestartRef.current = false;
+      if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
       if (recognitionRef.current) {
-        recognitionRef.current.stop();
+        try { recognitionRef.current.abort(); } catch {}
         recognitionRef.current = null;
       }
       if (timerRef.current) clearInterval(timerRef.current);
