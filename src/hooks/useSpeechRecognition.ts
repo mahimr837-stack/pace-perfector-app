@@ -27,6 +27,7 @@ interface SpeechRecognitionHook {
   startListening: () => void;
   stopListening: () => FinalSessionData;
   isSupported: boolean;
+  recognitionStatus: string;
 }
 
 export function useSpeechRecognition(): SpeechRecognitionHook {
@@ -38,7 +39,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [totalWords, setTotalWords] = useState(0);
   const [peakWPM, setPeakWPM] = useState(0);
-
+  const [recognitionStatus, setRecognitionStatus] = useState("idle");
   const recognitionRef = useRef<any>(null);
   const timerRef = useRef<ReturnType<typeof setInterval>>();
   const restartTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
