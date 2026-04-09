@@ -49,6 +49,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
   const accumulatedTranscriptRef = useRef("");
   const currentSessionFinalRef = useRef("");
+  const interimTranscriptRef = useRef("");
   const wpmHistoryRef = useRef<WPMSnapshot[]>([]);
   const peakWPMRef = useRef(0);
   const lastSnapshotTimeRef = useRef(-1);
@@ -91,7 +92,21 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   }, []);
 
   const getFullTranscript = useCallback(() => {
-    return `${accumulatedTranscriptRef.current}${currentSessionFinalRef.current}`.trim();
+    return [
+      accumulatedTranscriptRef.current,
+      currentSessionFinalRef.current,
+      interimTranscriptRef.current,
+    ]
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }, []);
+
+  const getCommittedTranscript = useCallback(() => {
+    return [accumulatedTranscriptRef.current, currentSessionFinalRef.current]
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
   }, []);
 
   const updateMetrics = useCallback(
@@ -159,11 +174,13 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }
 
         currentSessionFinalRef.current = sessionFinal;
+        interimTranscriptRef.current = interim;
         const fullTranscript = getFullTranscript();
+        const committedTranscript = getCommittedTranscript();
 
         if (!isSessionActive(sessionId)) return;
 
-        setTranscript(fullTranscript);
+        setTranscript(committedTranscript);
         setInterimTranscript(interim);
         console.log("Transcript:", fullTranscript);
       };
@@ -184,8 +201,16 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       recognition.onend = () => {
         if (activeSessionIdRef.current !== sessionId) return;
 
-        accumulatedTranscriptRef.current += currentSessionFinalRef.current;
+        accumulatedTranscriptRef.current = [
+          accumulatedTranscriptRef.current,
+          currentSessionFinalRef.current,
+          interimTranscriptRef.current,
+        ]
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
         currentSessionFinalRef.current = "";
+        interimTranscriptRef.current = "";
 
         if (!shouldRestartRef.current || !mountedRef.current) return;
 
@@ -228,6 +253,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
     accumulatedTranscriptRef.current = "";
     currentSessionFinalRef.current = "";
+    interimTranscriptRef.current = "";
     wpmHistoryRef.current = [];
     peakWPMRef.current = 0;
     lastSnapshotTimeRef.current = -1;
@@ -292,6 +318,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       setIsListening(false);
       setTranscript(finalTranscript);
       setInterimTranscript("");
+      interimTranscriptRef.current = "";
       setElapsedSeconds(finalElapsed);
       setTotalWords(wordCount);
       setCurrentWPM(finalWPM);
