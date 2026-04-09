@@ -1,0 +1,16 @@
+{
+  "name": "Speech Coach",
+  "short_name": "Speech Coach",
+  "description": "Improve your speaking clarity and pace with real-time feedback",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/placeholder.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
