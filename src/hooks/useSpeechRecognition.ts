@@ -183,6 +183,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
         setTranscript(committedTranscript);
         setInterimTranscript(interim);
+        setRecognitionStatus(`receiving (${fullTranscript.split(/\s+/).filter(Boolean).length} words)`);
         console.log("Transcript:", fullTranscript);
       };
 
@@ -190,6 +191,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         if (!isSessionActive(sessionId)) return;
 
         console.error("Speech recognition error:", event.error);
+        setRecognitionStatus(`error: ${event.error}`);
 
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           shouldRestartRef.current = false;
@@ -278,6 +280,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       recognition.start();
       if (!isSessionActive(sessionId)) return;
       setIsListening(true);
+      setRecognitionStatus("listening...");
       timerRef.current = setInterval(() => updateMetrics(sessionId), 1000);
     } catch (error) {
       console.error("Failed to start recognition:", error);
