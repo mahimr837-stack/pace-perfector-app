@@ -33,10 +33,46 @@ export default function HomeScreen() {
     startListening,
     stopListening,
     isSupported,
+    recognitionStatus,
   } = useSpeechRecognition();
 
   const [coachingMessage, setCoachingMessage] = useState<string | null>(null);
   const lastVibrationRef = useRef(0);
+
+  // Test mode: simulate a session with sample data
+  const handleTestMode = useCallback(() => {
+    const testTranscript = "um hello uh everyone today I want to like explain algebra like a teacher you know it is basically very important actually";
+    const testElapsed = 15;
+    const testWords = testTranscript.split(/\s+/).filter(Boolean).length;
+    const testWPM = calculateWPM(testWords, testElapsed);
+    const fillerCounts = countFillerWords(testTranscript);
+    const totalFillers = countTotalFillers(fillerCounts);
+    const clarityScore = calculateClarityScore(testTranscript, testWPM, totalFillers, testWords, testElapsed);
+    const tips = getImprovementTips(testWPM, testWPM + 20, totalFillers, clarityScore);
+
+    const testHistory = Array.from({ length: testElapsed }, (_, i) => ({
+      time: i + 1,
+      wpm: Math.round(testWPM + (Math.random() - 0.5) * 30),
+    }));
+
+    const session: SessionData = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      durationSeconds: testElapsed,
+      avgWPM: testWPM,
+      peakWPM: testWPM + 20,
+      totalWords: testWords,
+      clarityScore,
+      fillerCounts,
+      transcript: testTranscript,
+      wpmHistory: testHistory,
+      tips,
+    };
+
+    console.log("🧪 Test session:", session);
+    addSession(session);
+    navigate(`/results/${session.id}`);
+  }, [navigate]);
 
   const paceLevel = getPaceLevel(currentWPM);
 
@@ -111,6 +147,13 @@ export default function HomeScreen() {
         </div>
       )}
 
+      {/* Debug: recognition status */}
+      {isListening && recognitionStatus && (
+        <div className="mb-2 px-3 py-1 rounded bg-muted text-xs text-muted-foreground text-center">
+          Status: {recognitionStatus}
+        </div>
+      )}
+
       {/* Speed Indicator */}
       <div className="mb-6">
         <SpeedIndicator wpm={currentWPM} paceLevel={paceLevel} />
@@ -151,7 +194,12 @@ export default function HomeScreen() {
 
       {/* Tap to start hint */}
       {!isListening && !transcript && (
-        <p className="text-muted-foreground text-sm mt-4">Tap the microphone to start</p>
+        <div className="flex flex-col items-center gap-3 mt-4">
+          <p className="text-muted-foreground text-sm">Tap the microphone to start</p>
+          <Button variant="outline" size="sm" onClick={handleTestMode}>
+            🧪 Test Mode (Sample Data)
+          </Button>
+        </div>
       )}
     </div>
   );

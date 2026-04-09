@@ -27,6 +27,7 @@ interface SpeechRecognitionHook {
   startListening: () => void;
   stopListening: () => FinalSessionData;
   isSupported: boolean;
+  recognitionStatus: string;
 }
 
 export function useSpeechRecognition(): SpeechRecognitionHook {
@@ -38,7 +39,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [totalWords, setTotalWords] = useState(0);
   const [peakWPM, setPeakWPM] = useState(0);
-
+  const [recognitionStatus, setRecognitionStatus] = useState("idle");
   const recognitionRef = useRef<any>(null);
   const timerRef = useRef<ReturnType<typeof setInterval>>();
   const restartTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
@@ -182,6 +183,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
         setTranscript(committedTranscript);
         setInterimTranscript(interim);
+        setRecognitionStatus(`receiving (${fullTranscript.split(/\s+/).filter(Boolean).length} words)`);
         console.log("Transcript:", fullTranscript);
       };
 
@@ -189,6 +191,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         if (!isSessionActive(sessionId)) return;
 
         console.error("Speech recognition error:", event.error);
+        setRecognitionStatus(`error: ${event.error}`);
 
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           shouldRestartRef.current = false;
@@ -277,6 +280,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       recognition.start();
       if (!isSessionActive(sessionId)) return;
       setIsListening(true);
+      setRecognitionStatus("listening...");
       timerRef.current = setInterval(() => updateMetrics(sessionId), 1000);
     } catch (error) {
       console.error("Failed to start recognition:", error);
@@ -364,5 +368,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     startListening,
     stopListening,
     isSupported,
+    recognitionStatus,
   };
 }
