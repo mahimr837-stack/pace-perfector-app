@@ -365,5 +365,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     startListening,
     stopListening,
     isSupported,
+    recognitionStatus,
   };
 }
