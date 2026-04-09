@@ -47,6 +47,11 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        pace: {
+          good: "hsl(var(--pace-good))",
+          caution: "hsl(var(--pace-caution))",
+          fast: "hsl(var(--pace-fast))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
