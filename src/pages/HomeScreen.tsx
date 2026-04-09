@@ -61,34 +61,36 @@ export default function HomeScreen() {
 
   const handleToggle = useCallback(() => {
     if (isListening) {
-      stopListening();
-      // Build session and navigate to results
-      const avgWPM = calculateWPM(totalWords, elapsedSeconds);
-      const fillerCounts = countFillerWords(transcript);
+      // stopListening returns final data computed from refs (not stale state)
+      const finalData = stopListening();
+      
+      const avgWPM = calculateWPM(finalData.totalWords, finalData.elapsedSeconds);
+      const fillerCounts = countFillerWords(finalData.transcript);
       const totalFillers = countTotalFillers(fillerCounts);
-      const clarityScore = calculateClarityScore(transcript, avgWPM, totalFillers, totalWords, elapsedSeconds);
-      const tips = getImprovementTips(avgWPM, peakWPM, totalFillers, clarityScore);
+      const clarityScore = calculateClarityScore(finalData.transcript, avgWPM, totalFillers, finalData.totalWords, finalData.elapsedSeconds);
+      const tips = getImprovementTips(avgWPM, finalData.peakWPM, totalFillers, clarityScore);
 
       const session: SessionData = {
         id: crypto.randomUUID(),
         date: new Date().toISOString(),
-        durationSeconds: elapsedSeconds,
+        durationSeconds: finalData.elapsedSeconds,
         avgWPM,
-        peakWPM,
-        totalWords,
+        peakWPM: finalData.peakWPM,
+        totalWords: finalData.totalWords,
         clarityScore,
         fillerCounts,
-        transcript,
-        wpmHistory,
+        transcript: finalData.transcript,
+        wpmHistory: finalData.wpmHistory,
         tips,
       };
 
+      console.log("💾 Saving session:", session);
       addSession(session);
       navigate(`/results/${session.id}`);
     } else {
       startListening();
     }
-  }, [isListening, stopListening, startListening, transcript, totalWords, elapsedSeconds, peakWPM, wpmHistory, navigate]);
+  }, [isListening, stopListening, startListening, navigate]);
 
   return (
     <div className="min-h-screen flex flex-col items-center px-4 pb-8 pt-6 max-w-lg mx-auto">
