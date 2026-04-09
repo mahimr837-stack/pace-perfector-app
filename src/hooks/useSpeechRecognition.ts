@@ -116,21 +116,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     return recognition;
   }, [SpeechRecognition]);
 
-  const startListening = useCallback(async () => {
+  const startListening = useCallback(() => {
     if (!SpeechRecognition) return;
-
-    // Check microphone permission first
-    try {
-      if (navigator.permissions) {
-        const status = await navigator.permissions.query({ name: "microphone" as PermissionName });
-        if (status.state === "denied") {
-          console.error("Microphone permission denied");
-          return;
-        }
-      }
-    } catch {
-      // permissions API may not be available
-    }
 
     // Clean up any existing recognition
     shouldRestartRef.current = false;
@@ -152,9 +139,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     setTotalWords(0);
     setPeakWPM(0);
     startTimeRef.current = Date.now();
-
-    // Small delay to ensure previous recognition is fully cleaned up
-    await new Promise(resolve => setTimeout(resolve, 200));
 
     const recognition = createRecognition();
     if (!recognition) return;
