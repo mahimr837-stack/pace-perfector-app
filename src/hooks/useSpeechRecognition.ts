@@ -6,6 +6,15 @@ export interface WPMSnapshot {
   wpm: number;
 }
 
+export interface FinalSessionData {
+  transcript: string;
+  totalWords: number;
+  elapsedSeconds: number;
+  currentWPM: number;
+  peakWPM: number;
+  wpmHistory: WPMSnapshot[];
+}
+
 interface SpeechRecognitionHook {
   isListening: boolean;
   transcript: string;
@@ -16,7 +25,7 @@ interface SpeechRecognitionHook {
   totalWords: number;
   peakWPM: number;
   startListening: () => void;
-  stopListening: () => void;
+  stopListening: () => FinalSessionData;
   isSupported: boolean;
 }
 
@@ -36,6 +45,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const transcriptRef = useRef("");
   const shouldRestartRef = useRef(false);
   const restartTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const wpmHistoryRef = useRef<WPMSnapshot[]>([]);
+  const peakWPMRef = useRef(0);
 
   const SpeechRecognition = typeof window !== "undefined"
     ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -53,9 +64,17 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
     const wpm = calculateWPM(words, elapsed);
     setCurrentWPM(wpm);
-    setPeakWPM(prev => Math.max(prev, wpm));
 
-    setWpmHistory(prev => [...prev, { time: Math.round(elapsed), wpm }]);
+    if (wpm > peakWPMRef.current) {
+      peakWPMRef.current = wpm;
+    }
+    setPeakWPM(peakWPMRef.current);
+
+    const snapshot: WPMSnapshot = { time: Math.round(elapsed), wpm };
+    wpmHistoryRef.current = [...wpmHistoryRef.current, snapshot];
+    setWpmHistory(wpmHistoryRef.current);
+
+    console.log("📊 Metrics update — Words:", words, "Elapsed:", elapsed.toFixed(1), "WPM:", wpm, "Peak:", peakWPMRef.current);
   }, []);
 
   const createRecognition = useCallback(() => {
@@ -80,6 +99,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       transcriptRef.current = final;
       setTranscript(final);
       setInterimTranscript(interim);
+      console.log("🎤 Transcript updated:", final.substring(0, 80));
     };
 
     recognition.onerror = (event: any) => {
@@ -88,12 +108,10 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         shouldRestartRef.current = false;
         setIsListening(false);
       }
-      // For "no-speech" or "network" errors, let onend handle restart
     };
 
     recognition.onend = () => {
       if (shouldRestartRef.current) {
-        // Delay restart to avoid rapid start/stop cycles that crash the tab
         restartTimeoutRef.current = setTimeout(() => {
           if (!shouldRestartRef.current) return;
           try {
@@ -119,18 +137,16 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const startListening = useCallback(() => {
     if (!SpeechRecognition) return;
 
-    // Clean up any existing recognition
     shouldRestartRef.current = false;
-    if (restartTimeoutRef.current) {
-      clearTimeout(restartTimeoutRef.current);
-    }
+    if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
     if (recognitionRef.current) {
       try { recognitionRef.current.abort(); } catch {}
       recognitionRef.current = null;
     }
 
-    // Reset state
     transcriptRef.current = "";
+    wpmHistoryRef.current = [];
+    peakWPMRef.current = 0;
     setTranscript("");
     setInterimTranscript("");
     setCurrentWPM(0);
@@ -157,21 +173,49 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     }
   }, [SpeechRecognition, createRecognition, updateMetrics]);
 
-  const stopListening = useCallback(() => {
+  // Returns final computed data directly from refs (not stale state)
+  const stopListening = useCallback((): FinalSessionData => {
     shouldRestartRef.current = false;
-    if (restartTimeoutRef.current) {
-      clearTimeout(restartTimeoutRef.current);
-    }
+    if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
     if (recognitionRef.current) {
       try { recognitionRef.current.abort(); } catch {}
       recognitionRef.current = null;
     }
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
+    if (timerRef.current) clearInterval(timerRef.current);
     setIsListening(false);
-    updateMetrics();
-  }, [updateMetrics]);
+
+    // Compute final values from refs (avoids stale state issue)
+    const finalTranscript = transcriptRef.current;
+    const finalElapsed = (Date.now() - startTimeRef.current) / 1000;
+    const words = finalTranscript.trim().split(/\s+/).filter(w => w.length > 0).length;
+    const finalWPM = calculateWPM(words, finalElapsed);
+
+    if (finalWPM > peakWPMRef.current) peakWPMRef.current = finalWPM;
+
+    // Add final snapshot
+    const finalSnapshot: WPMSnapshot = { time: Math.round(finalElapsed), wpm: finalWPM };
+    wpmHistoryRef.current = [...wpmHistoryRef.current, finalSnapshot];
+
+    const finalData: FinalSessionData = {
+      transcript: finalTranscript,
+      totalWords: words,
+      elapsedSeconds: finalElapsed,
+      currentWPM: finalWPM,
+      peakWPM: peakWPMRef.current,
+      wpmHistory: wpmHistoryRef.current,
+    };
+
+    console.log("🛑 Final session data:", finalData);
+
+    // Update state for UI
+    setElapsedSeconds(finalElapsed);
+    setTotalWords(words);
+    setCurrentWPM(finalWPM);
+    setPeakWPM(peakWPMRef.current);
+    setWpmHistory(wpmHistoryRef.current);
+
+    return finalData;
+  }, []);
 
   useEffect(() => {
     return () => {
